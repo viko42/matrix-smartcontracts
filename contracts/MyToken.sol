@@ -36,10 +36,11 @@ contract InitialPoolSeeder is ReentrancyGuard {
     mapping(address => bool) public hasUserClaimed;
     uint256 public totalContributions;
     bool public claimEnabled;
-    uint256 public constant AIRDROP_PERCENTAGE = 90;
-    uint256 public constant POOL_PERCENTAGE = 10;
+    uint256 public constant AIRDROP_PERCENTAGE = 65;
+    uint256 public constant POOL_PERCENTAGE = 35;
     address public deployer;
     uint256 public uniqueContributorsCount;
+    uint256 public totalTokensForAirdrop;
 
     event TokensDeposited(address indexed sender, uint256 tokenAmount, uint256 wronAmount);
     event PoolSeeded(uint256 amountA, uint256 amountB, uint256 liquidity);
@@ -98,6 +99,7 @@ contract InitialPoolSeeder is ReentrancyGuard {
         uint256 totalTokenBalance = token.balanceOf(address(this));
         uint256 wronAmount = wron.balanceOf(address(this));
 
+        totalTokensForAirdrop = (totalTokenBalance * AIRDROP_PERCENTAGE) / 100;
         uint256 tokenAAmount = (totalTokenBalance * POOL_PERCENTAGE) / 100;
         
         require(tokenAAmount > 0 && wronAmount > 0, "No tokens available");
@@ -124,16 +126,52 @@ contract InitialPoolSeeder is ReentrancyGuard {
 
         claimEnabled = true;
     }
+
+    // function emergencyWithdraw() external onlyOwner {
+    //     require(!poolSeeded, "Pool already seeded");
+        
+    //     uint256 tokenBalance = token.balanceOf(address(this));
+    //     if (tokenBalance > 0) {
+    //         token.transfer(owner, tokenBalance);
+    //     }
+        
+    //     uint256 ronBalance = address(this).balance;
+    //     if (ronBalance > 0) {
+    //         payable(owner).transfer(ronBalance);
+    //     }
+    // }
+
+    // Nouvelle fonction pour le claim des airdrops
     function claimAirdrop() external nonReentrant {
         require(claimEnabled, "Claiming not enabled yet");
         require(userContributions[msg.sender] > 0, "No contribution found");
         require(!hasUserClaimed[msg.sender], "Already claimed");
 
-        uint256 userShare = (userContributions[msg.sender] * AIRDROP_PERCENTAGE * token.balanceOf(address(this))) 
-                           / (totalContributions * 100);
+        uint256 userShare = (userContributions[msg.sender] * totalTokensForAirdrop) 
+                           / totalContributions;
         
         hasUserClaimed[msg.sender] = true;
         token.transfer(msg.sender, userShare);
+    }
+
+    struct PoolInfo {
+        uint256 uniqueContributorsCount;
+        bool claimEnabled;
+        uint256 totalContributions;
+        address deployer;
+        uint256 wronThreshold;
+        uint256 remainingTokensNeeded;
+    }
+
+    function getPoolInfo() external view returns (PoolInfo memory) {
+        return PoolInfo({
+            uniqueContributorsCount: uniqueContributorsCount,
+            claimEnabled: claimEnabled,
+            totalContributions: totalContributions,
+            deployer: deployer,
+            wronThreshold: WRON_THRESHOLD,
+            remainingTokensNeeded: remainingTokensNeeded()
+        });
     }
 }
 
@@ -161,6 +199,7 @@ contract MyToken is ERC20, ERC20Burnable, AccessControl {
         _grantRole(DEFAULT_ADMIN_ROLE, owner);
         _grantRole(MINTER_ROLE, owner);
         
+        // Deploy PoolSeeder first
         poolSeeder = new InitialPoolSeeder(
             address(this),
             address(wronAddress),

@@ -23,6 +23,7 @@ contract TokenFactory is Ownable {
     }
 
     event TokenDeployed(string name, string symbol, address tokenAddress);
+
     function deployTokenV2(
         string memory name,
         string memory symbol,
